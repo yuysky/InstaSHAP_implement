@@ -60,10 +60,13 @@ class surrogate:
       num_features: number of features.
     '''
 
-    def __init__(self, mlp_args = None, dataset_obj = None):
+    def __init__(self, mlp_args = None, dataset_obj = None, max_number_of_rounds = 20, order=2, output_type="regression"):
         super().__init__()
         self.mlp_args = mlp_args
         self.dataset_obj = dataset_obj
+        self.max_number_of_rounds = max_number_of_rounds
+        self.order = order
+        self.output_type = output_type
 
     def get_mlp(self):
         #TODO: need to be mlp.arg
@@ -87,14 +90,15 @@ class surrogate:
                                                 grouped_features_dict)
         self.FID_hyper = my_FID_hypers
     
-    def get_FIS_hyper(self, MAX_K = 2, device = 'cpu'): # MAX_K: maximum interaction order
+    def get_FIS_hyper(self, device = 'cpu'): # MAX_K: maximum interaction order
 
-        max_number_of_rounds = 20
+        MAX_K = self.order
+        max_number_of_rounds = self.max_number_of_rounds
         inters_per_round = 1
         tau_tup=(1.0,0.5,0.33)
         
         tau_thresholds = {}
-        for k in range(MAX_K): #NOTE: no good MAX_K = None support yet
+        for k in range(MAX_K): 
             tau_thresholds[k+1] = tau_tup[k]
         
         my_FIS_hypers = batchwise_FIS_Hyperparameters(MAX_K, tau_thresholds, max_number_of_rounds, inters_per_round,
@@ -106,10 +110,12 @@ class surrogate:
 
     def get_interactions(self, device = 'cpu'):
 
+        output_type = self.output_type if hasattr(self, 'output_type') else "regression"
+
         if not hasattr(self, 'trained_mlp'):
             self.get_mlp()
         if not hasattr(self, 'FID_hyper'):
-            self.get_FID_hyper()
+            self.get_FID_hyper(output_type=output_type)
         if not hasattr(self, 'FIS_hyper'):
             self.get_FIS_hyper()
 
@@ -253,3 +259,85 @@ class InstaSHAP(nn.Module):
             shapley_values[:, i] = inter_output.squeeze()
 
         return shapley_values
+
+class phi_classifier(nn.Module):
+    def __init__(self, num_features, out_features):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(num_features, 16),
+            nn.ReLU(),
+            nn.Linear(16, out_features),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+class InstaSHAP_classifier(InstaSHAP):
+    def __init__(self, interactions, transform_matrix, num_classes, device='cpu'):
+        super().__init__(interactions, transform_matrix, device)
+        self.num_classes = num_classes
+        self.model = nn.ModuleList([
+            phi_classifier(len(interactions[i]), num_classes) for i in range(1, len(interactions))
+        ])
+        self.to(device)
+
+    def forward(self, x, S):
+        batch_size = x.shape[0]
+
+        transformed_S = S @ self.transform_matrix
+        len_interactions_tensor = torch.tensor(self.len_interactions, device=self.device).unsqueeze(0)
+        is_active = (transformed_S >= len_interactions_tensor - 0.01).float()
+        
+        inter_outputs = []
+        for i, phi_model in enumerate(self.model):
+            feature_selected = self.transform_matrix[:, i].squeeze() 
+            inter_input = x[:, feature_selected == 1]
+            inter_output = phi_model(inter_input)
+            inter_outputs.append(inter_output)
+        
+        inter_outputs = torch.stack(inter_outputs, dim=1)
+        is_active = is_active.unsqueeze(-1)
+        output = torch.sum(inter_outputs * is_active, dim=1)
+
+        return output
+
+    def train_instaSHAP(self, train_loader, num_epochs=10, lr=5e-3):
+        optimizer = optim.Adam(self.parameters(), lr=lr)
+        criterion = nn.CrossEntropyLoss()
+        
+        x_sample, _ = next(iter(train_loader))
+        sampler = ShapleySampler(num_features=x_sample.shape[1])
+
+        self.train()
+        for epoch in range(num_epochs):
+            total_loss = 0.0
+            for x_batch, y_batch in tqdm(train_loader, desc=f'Epoch {epoch+1}'):
+                x_batch = x_batch.to(self.device)
+                y_batch = y_batch.to(self.device)
+                S_batch = sampler.sample(x_batch.shape[0], paired_sampling=True).to(self.device)
+
+                optimizer.zero_grad()
+                logits = self.forward(x_batch, S_batch)
+                
+                if y_batch.dim() > 1:
+                    y_batch = y_batch.squeeze()
+                
+                loss = criterion(logits, y_batch.long())
+                loss.backward()
+                optimizer.step()
+                
+                total_loss += loss.item() * x_batch.size(0)
+            
+            avg_loss = total_loss / len(train_loader.dataset)
+            print(f'Epoch {epoch+1}, Loss: {avg_loss:.4f}')
+
+    def get_shapley_values(self, x):
+        self.eval()
+        x = x.to(self.device)
+        with torch.no_grad():
+            shaps = []
+            for i, phi_model in enumerate(self.model):
+                feature_selected = self.transform_matrix[:, i].squeeze() 
+                inter_input = x[:, feature_selected == 1]
+                shaps.append(phi_model(inter_input))
+            return torch.stack(shaps, dim=1)
