@@ -171,6 +171,7 @@ class InstaSHAP(nn.Module):
 
     def __init__(self, interactions, transform_matrix, device='cpu'):
         super().__init__()
+        self.phi_0 = nn.Parameter(torch.zeros(1))
         self.model = nn.ModuleList(
             [phi(num_features=len(interactions[i])) for i in range(1, len(interactions))]
         )
@@ -202,7 +203,7 @@ class InstaSHAP(nn.Module):
             inter_outputs.append(inter_output)
         
         inter_outputs = torch.cat(inter_outputs, dim=1)  # shape: (batch_size, num_interactions)
-        output = torch.sum(inter_outputs * is_active, dim=1, keepdim=True)
+        output = torch.sum(inter_outputs * is_active, dim=1, keepdim=True) + self.phi_0  # shape: (batch_size, 1)
 
         return output
     
@@ -280,6 +281,7 @@ class InstaSHAP_classifier(InstaSHAP):
             phi_classifier(len(interactions[i]), num_classes) for i in range(1, len(interactions))
         ])
         self.to(device)
+        self.phi_0 = nn.Parameter(torch.zeros(num_classes))
 
     def forward(self, x, S):
         batch_size = x.shape[0]
@@ -297,7 +299,7 @@ class InstaSHAP_classifier(InstaSHAP):
         
         inter_outputs = torch.stack(inter_outputs, dim=1)
         is_active = is_active.unsqueeze(-1)
-        output = torch.sum(inter_outputs * is_active, dim=1)
+        output = torch.sum(inter_outputs * is_active, dim=1) + self.phi_0
 
         return output
 
