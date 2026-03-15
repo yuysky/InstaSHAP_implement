@@ -84,7 +84,7 @@ python hypermeter_tuing_bikesharing.py
  
 The notebook `test/data_augment_distillation.ipynb` demonstrates using XGBoost as a teacher model with mixup-based data augmentation to improve InstaSHAP training. See `src/distill_utils.py` for the implementation.
 
-
+```
 @misc{enouen2025instashapinterpretableadditivemodels,
       title={InstaSHAP: Interpretable Additive Models Explain Shapley Values Instantly}, 
       author={James Enouen and Yan Liu},
@@ -94,3 +94,4 @@ The notebook `test/data_augment_distillation.ipynb` demonstrates using XGBoost a
       primaryClass={cs.LG},
       url={https://arxiv.org/abs/2502.14177}, 
 }
+```
