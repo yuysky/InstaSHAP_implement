@@ -46,7 +46,7 @@ pip install torch numpy matplotlib tqdm xgboost scikit-learn
  
 ### 3. Install the patched SIAN package
  
-InstaSHAP relies on [SIAN (Sparse Interaction Additive Networks)]([https://github.com/matteo-enovouen/sparse-interaction-additive-networks](https://github.com/EnouenJ/sparse-interaction-additive-networks.git)) for interaction detection. The official package has incorrect imports in some files, so we ship a patched version.
+InstaSHAP relies on [SIAN (Sparse Interaction Additive Networks)](https://github.com/EnouenJ/sparse-interaction-additive-networks.git) for interaction detection. The official package has incorrect imports in some files, so we ship a patched version.
  
 ```bash
 cd others/
