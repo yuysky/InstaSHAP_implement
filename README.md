@@ -1,4 +1,4 @@
-InstaSHAP — PyTorch Reimplementation
+# InstaSHAP — PyTorch Reimplementation
 A PyTorch reimplementation of InstaSHAP (Enouen & Laguna, ICLR 2025), developed as part of Research Seminar in Explainable AI: Reproducibility and Critical Evaluation of Methods, supervised by Dr. Giuseppe Casalicchio.
 
 Note: This is an independent reimplementation for academic study and critical analysis, not the authors' official code.
@@ -55,6 +55,7 @@ cd sparse-interaction-additive-networks/
 pip install .
 cd ../..
 ```
+## Run the experiments
 
 ### Reproducing paper experiments
  
